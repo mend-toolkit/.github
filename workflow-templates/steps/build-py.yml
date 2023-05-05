@@ -1,0 +1,123 @@
+name: CI
+on:
+  workflow_dispatch:
+
+env:
+  WDIR: ./Automation
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    outputs:
+      python_version: ${{ steps.set_env_vars.outputs.PYTHON_VERSION }}
+      min_py_ver: ${{ steps.set_env_vars.outputs.MIN_PY_VER }}
+      version: ${{ steps.set_env_vars.outputs.VERSION }}
+      release: ${{ steps.set_env_vars.outputs.RELEASE }}
+      app_dir: ${{ steps.set_env_vars.outputs.APP_DIR }}
+      pkg_name: ${{ steps.set_env_vars.outputs.PKG_NAME }}
+      whl_name: ${{ steps.set_env_vars.outputs.WHL_NAME }}
+      source_branch: ${{ steps.get_source_branch.outputs.SOURCE_BRANCH }}
+    
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+
+    steps:
+      - name: Set Environment Variables
+        id: set_env_vars
+        run: |
+          pkgVersion=0.0.0.ci0
+          pkgRelease=false
+
+          echo "========= GITHUB_OUTPUT ========="
+          echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_OUTPUT
+          if [[ ${{ strategy.job-index }} == 0 ]]; then
+            echo "MIN_PY_VER=${{ matrix.python-version }}" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ "$GITHUB_REF" == *"refs/tags/v"* || "$GITHUB_REF" == *"refs/tags/test-v"* ]]; then
+            pkgVersion="$(echo ${{ github.ref }} | sed -r 's/^[\/a-zA-z-]+//')"
+            if [[ $pkgVersion != *@(a|b)* ]]; then
+              pkgRelease=true
+            fi
+          elif [[ "$GITHUB_REF" == *"/staging" ]]; then
+            latestVer="$(git describe --tags $(git rev-list --tags --max-count=1) | sed -r 's/^[\/a-zA-z-]+//')"
+            if [[ $(echo "$latestVer" | cut -d. -f1,2) == $(date +"%y.%-m") ]] ; then
+              nextVersion="$(date +"%y.%-m").$(( $(echo "$latestVer" | sed 's/.*\.//') + 1 ))"
+            else
+              nextVersion="$(date +"%y.%-m.1")"
+            fi
+            pkgVersion="${nextVersion}rc$(date +"%Y%m%d%H%M")"
+          fi
+          
+          echo "VERSION=$pkgVersion" >> $GITHUB_OUTPUT
+          echo "RELEASE=$pkgRelease" >> $GITHUB_OUTPUT
+          echo "APP_DIR=${{ env.WDIR }}/${{ env.APP_NAME }}" >> $GITHUB_OUTPUT
+          echo "PKG_NAME=${{ env.APP_NAME }}-${pkgVersion}" >> $GITHUB_OUTPUT
+          echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_OUTPUT
+
+          echo "========== GITHUB_ENV ==========="
+          echo "PYTHON_VERSION=${{ matrix.python-version }}" >> $GITHUB_ENV
+          echo "VERSION=$pkgVersion" >> $GITHUB_ENV
+          echo "APP_DIR=${{ env.WDIR }}/${{ env.APP_NAME }}" >> $GITHUB_ENV
+          echo "PKG_NAME=${{ env.APP_NAME }}-${pkgVersion}" >> $GITHUB_ENV
+          echo "WHL_NAME=${{ env.APP_NAME }}-${pkgVersion}-py3-none-any.whl" >> $GITHUB_ENV
+      
+      - uses: actions/checkout@v3
+      - name: Get Source Branch
+        id: get_source_branch
+        run: |
+          echo "SOURCE_BRANCH=$(git branch --contains ${{ github.sha }} | grep -E 'feature|staging' | sed 's/[ *]//g')" >> $GITHUB_OUTPUT
+      
+      - name: Install Dependencies
+        id: install_dependencies
+        working-directory: ${{ env.WDIR }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 wheel pytest -r requirements.txt
+      
+      - name: Lint with flake8
+        id: lint_with_flake8
+        working-directory: ${{ env.WDIR }}
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --ignore=E501,F841
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Check Unit Test Files
+        id: check_test_files
+        uses: andstor/file-existence-action@v2
+        with:
+          files: "*/tests/test_*.py"
+          
+      - name: Run Tests with pytest
+        id: tests_pytest
+        if: steps.check_test_files.outputs.files_exists == 'true'
+        working-directory: ${{ env.WDIR }}
+        run: pytest
+
+      - name: Unittest
+        id: test_unittest
+        if: steps.check_test_files.outputs.files_exists == 'true'
+        working-directory: ${{ env.WDIR }}
+        run: python -m unittest
+
+      - name: Create wheel Package
+        id: create_whl
+        working-directory: ${{ env.WDIR }}
+        run: python setup.py bdist_wheel
+
+      - name: Install ${{ env.PKG_NAME }}
+        id: install_whl
+        working-directory: ${{ env.WDIR }}
+        run: pip install "dist/${{ env.WHL_NAME }}"
+
+      - name: Copy wheel
+        id: copy_whl
+        working-directory: ${{ env.WDIR }}
+        run: |
+          mkdir "dist/${{ env.PYTHON_VERSION }}"
+          cp "dist/${{ env.WHL_NAME }}" "dist/${{ env.PYTHON_VERSION }}/"
+

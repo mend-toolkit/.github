@@ -1,0 +1,25 @@
+name: CI-PY
+on:
+  workflow_dispatch:
+    inputs:
+      param1:
+        description: 'Parameter 1'
+        required: true
+        default: 'default-value1'
+      param2:
+        description: 'Parameter 2'
+        required: true
+        default: 'default-value2'
+
+jobs:
+  test-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Step 1
+        run: |
+          echo "This is Step 1 with parameter: ${{ github.event.inputs.param1 }}"
+
+      - name: Step 2
+        run: |
+          echo "This is Step 2 with parameter: ${{ github.event.inputs.param2 }}"

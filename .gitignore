@@ -1,0 +1,17 @@
+# Local/Internal Directories
+_archive/
+_misc/
+local/
+log/
+target/
+out/
+
+# IDE/Workspace Directories
+.idea/
+.vs/
+.vscode/
+.ws/
+
+# Excluded Files
+local-env.*
+.DS_Store

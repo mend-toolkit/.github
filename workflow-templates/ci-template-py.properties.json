@@ -1,0 +1,16 @@
+{
+    "name": "PS CI",
+    "description": "PS CI starter workflow",
+    "iconName": "mend_io_logo_cir",
+    "categories": [
+        "continuous-integration",
+        "Python",
+        "Pip"
+    ],
+    "filePatterns": [
+        "setup.py$",
+        "setup.cfg",
+        "requirements.txt",
+        ".*\\.md$"
+    ]
+}

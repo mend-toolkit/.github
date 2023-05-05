@@ -4,13 +4,14 @@ on:
   # push:
   #   branches:
   #     - '**'
+  #     - $default-branch
   #     - '!ws-iac-scan-results/**'
   #     - '!whitesource-remediate/master-all**'
   #     - '!whitesource/**'
   #   tags:
   #     - '*'
   # schedule:
-  #   - cron: '0 4 * * *'
+  #   - cron: $cron-daily
 
 env:
   APP_NAME: mend_app_name
